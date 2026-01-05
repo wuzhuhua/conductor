@@ -1,0 +1,42 @@
+version: 0.2
+run-as: root
+
+phases:
+
+  install:
+    commands:
+      - echo 'Check kubectl version'
+      - kubectl version --short --client
+      - echo Test if AWS credentials exist
+      - aws sts get-caller-identity
+
+  pre_build:
+    commands:
+      - echo Logging in to Amazon EKS...
+      - aws eks --region $AWS_DEFAULT_REGION update-kubeconfig --name $AWS_CLUSTER
+      - echo check config
+      - kubectl config view --minify
+      - echo check kubectl access
+      - kubectl get svc
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME
+
+
+  build:
+    commands:
+      - IMAGE_TAG=$(git rev-parse HEAD | cut -c 1-8)
+      - |
+        if [ "$ALREADY_BUILD" == "true" ]; then
+          echo "Skipping build as ALREADY_BUILD is set to true"
+        else
+          echo Build started on `date`
+          echo Building the Docker image...
+          docker build -t $IMAGE_REPO_NAME:$IMAGE_TAG -f docker/server/Dockerfile .
+          docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
+          BUILD_SUCCESS=true
+        fi
+  post_build:
+    commands:
+      - if [ "$BUILD_SUCCESS" == "true" ] || [ "$ALREADY_BUILD" == "true" ]; then kubectl set image deployment/conductor-server conductor-server=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG -n conductor; fi;

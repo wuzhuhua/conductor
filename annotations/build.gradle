@@ -1,0 +1,28 @@
+
+plugins {
+    id 'maven-publish'
+}
+
+dependencies {
+
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            groupId = 'com.netflix.conductor'
+            artifactId = 'conductor-annotations'
+            version = '3.13.5-Rengage-SNAPSHOT'
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url 'https://rengage-593045915463.d.codeartifact.us-west-2.amazonaws.com/maven/conductor/'
+            credentials {
+                username "aws"
+                password System.env.CODEARTIFACT_AUTH_TOKEN
+            }
+        }
+    }
+}
